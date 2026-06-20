@@ -699,6 +699,14 @@ function update() {
     let p1HQ = structures.find(s=>s.type==='HQ'&&s.owner===1);
     if(p1HQ) revealFog(p1HQ.x, p1HQ.y, BUILDINGS['HQ'].vision);
 
+    // If Radar is active, permanently reveal the fog around the Enemy HQ
+    if (buffs.radar === 1) {
+        let enemyHQ = structures.find(s => s.id === 'hq2');
+        if (enemyHQ) {
+            revealFog(enemyHQ.x, enemyHQ.y, BUILDINGS['HQ'].vision);
+        }
+    }
+
     updateParticles();
 
     if (frameCount % 10 === 0) detectAlerts();
