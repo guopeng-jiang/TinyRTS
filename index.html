@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Frontier RTS - Command Upgrade</title>
+    <title>Tiny RTS - Command Upgrade</title>
     <style>
         body, html { margin: 0; padding: 0; overflow: hidden; background-color: #050505; font-family: 'Courier New', Courier, monospace; user-select: none; }
         canvas { display: block; }
@@ -896,7 +896,7 @@ function runAI() {
     let availableRelays = structures.filter(s => s.owner === 0 && s.type === 'Relay').length;
 
     if (ai.phaseTimer % 10 === 0) {
-        if (ai.phase >= 2 && ai.money >= 1000 && aiInfantry >= 2) {
+        if (ai.phase >= 2 && ai.money >= 900 && aiInfantry >= 2) {
             spawnUnit('Tank', 2, hq.x - 2, hq.y - 2); ai.money -= 300;
         } 
         else if (ai.money >= 500 && (aiInfantry < 6 || ai.money > 200)) {

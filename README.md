@@ -1,10 +1,10 @@
-# Frontier RTS - Command Upgrade
+# Tiny RTS - Command Upgrade
 
-**Frontier RTS** is a lightweight, browser-based HTML5 Real-Time Strategy game. Command your units, establish supply lines, and conquer an AI opponent on a procedurally generated map. 
+**Tiny RTS** is a lightweight, browser-based HTML5 Real-Time Strategy game. Command your units, establish supply lines, and conquer an AI opponent on a procedurally generated map. 
 
 Play the game directly in your browser here: **[Insert Your GitHub Pages Link Here]**
 
-![Frontier RTS Gameplay](https://img.shields.io/badge/Status-Playable-brightgreen.svg)
+![Tiny RTS Gameplay](https://img.shields.io/badge/Status-Playable-brightgreen.svg)
 ![HTML5 Canvas](https://img.shields.io/badge/Tech-HTML5%20Canvas-orange.svg)
 ![Vanilla JS](https://img.shields.io/badge/Tech-Vanilla%20JS-yellow.svg)
 
