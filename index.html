@@ -155,8 +155,8 @@
 
 <script>
 /**
- * FRONTIER RTS - V0.6 (HD Rendering & Move Rings)
- * Changes: Massive graphic fidelity improvements, drop shadows, 3D terrains, move command feedback rings.
+ * FRONTIER RTS - V0.7 (Kamikaze Drones Update)
+ * Changes: Drones now act as suicide bombers when touching enemy units/buildings.
  */
 
 // --- CONFIG & CONSTANTS ---
@@ -187,7 +187,7 @@ const MINIMAP_COLORS = {
 };
 
 const UNIT_DATA = {
-    'Drone':      { hp: 20,  speed: 5.0, attack: 0,  vision: 8, cost: 50,  icon: '&#129418;', color: '#10b981', role: 'Fast scout', desc: 'Finds relays. Cannot attack.' },
+    'Drone':      { hp: 20,  speed: 5.0, attack: 0,  vision: 8, cost: 50,  icon: '&#129418;', color: '#10b981', role: 'Fast scout', desc: 'Finds relays. Explodes on contact with enemies.' },
     'Infantry':   { hp: 100, speed: 2.0, attack: 10, vision: 4, cost: 100, icon: '&#128308;', color: '#3b82f6', role: 'Capture unit', desc: 'Captures neutralized buildings. Light combat.' },
     'Tank':       { hp: 300, speed: 2.5, attack: 30, vision: 4, cost: 300, icon: '&#128308;', color: '#ef4444', role: 'Heavy assault', desc: 'Strong vs buildings & units. Neutralizes defenses.' },
     'Heavy Tank': { hp: 600, speed: 1.5, attack: 50, vision: 4, cost: 500, icon: '&#128313;', color: '#a855f7', role: 'Siege unit', desc: 'Slow but devastating. Requires Lab.' }
@@ -573,14 +573,19 @@ function update() {
         if (r.life <= 0) moveRings.splice(i, 1);
     });
 
-    // Units
+    let deadUnits = new Set(); // Track units killed by explosions
+
+    // Units Loop
     for (let i = units.length - 1; i >= 0; i--) {
         let u = units[i];
+        if (deadUnits.has(u)) continue; // Skip if killed by a drone explosion this frame
+
         let data = UNIT_DATA[u.type];
         if (u.cooldown > 0) u.cooldown--;
 
         if (u.owner === 1) revealFog(u.x, u.y, data.vision);
 
+        // Standard Combat Logic
         if (data.attack > 0 && u.cooldown <= 0) {
             let target = findNearestEnemy(u);
             if (target && target.dist <= 2.5) {
@@ -601,7 +606,7 @@ function update() {
                 if (target.entity.hp <= 0) {
                     if (target.type === 'unit') {
                         spawnExplosion(target.entity.x, target.entity.y, '#fbbf24', 10, 0.6);
-                        units.splice(units.indexOf(target.entity), 1);
+                        deadUnits.add(target.entity); // Tag for removal
                     } else if (target.type === 'building') {
                         let b = target.entity;
                         let wasOwner = b.owner;
@@ -632,7 +637,9 @@ function update() {
             }
         }
 
+        // Drone Special Interactions
         if (u.type === 'Drone') {
+            // 1. Relay capturing
             let nearbyRelay = structures.find(s => s.type === 'Relay' && distance(u.x, u.y, s.x, s.y) <= 2.0);
             if (nearbyRelay) {
                 if (u.owner === 1) {
@@ -645,8 +652,73 @@ function update() {
                 }
                 structures.splice(structures.indexOf(nearbyRelay), 1);
             }
+
+            // 2. Suicide Attack Logic
+            let nearestEnemy = findNearestEnemy(u);
+            if (nearestEnemy && nearestEnemy.dist <= 1.2) { // Extremely close proximity
+                let explosionRadius = 2.5;
+                let damage = 150; 
+                let supplyChanged = false;
+
+                // Drone self-destructs
+                u.hp = 0;
+                deadUnits.add(u);
+                spawnExplosion(u.x, u.y, '#10b981', 24, 1.5); // Green-ish explosion
+                spawnExplosion(u.x, u.y, '#facc15', 12, 1.0);
+
+                // Splash damage to units
+                units.forEach(otherU => {
+                    if (otherU.owner !== u.owner && otherU.owner !== 0 && distance(u.x, u.y, otherU.x, otherU.y) <= explosionRadius) {
+                        otherU.hp -= damage;
+                        if (otherU.hp <= 0 && !deadUnits.has(otherU)) {
+                            spawnExplosion(otherU.x, otherU.y, '#fbbf24', 10, 0.6);
+                            deadUnits.add(otherU);
+                        }
+                    }
+                });
+
+                // Splash damage to buildings
+                structures.forEach(b => {
+                    if (b.owner !== u.owner && b.owner !== 0 && distance(u.x, u.y, b.x, b.y) <= explosionRadius) {
+                        let defBuff = 1.0;
+                        let tInf = getInfluenceOwner(b.x, b.y);
+                        if (tInf === b.owner && b.owner !== 0) defBuff = 0.7;
+
+                        b.hp -= (damage * defBuff);
+
+                        if (b.hp <= 0) {
+                            let wasOwner = b.owner;
+                            let wasHQ = b.type === 'HQ';
+                            b.owner = 0;
+                            b.hp = 0;
+                            b.capProgress = 0;
+                            b.capBy = 0;
+                            b.connected = false;
+                            b.supplyParent = null;
+                            supplyChanged = true;
+
+                            let boomColor = wasOwner === 1 ? 'rgba(96, 165, 250, 1)' : 'rgba(248, 113, 113, 1)';
+                            spawnExplosion(b.x, b.y, boomColor, 24, 1.2);
+                            spawnExplosion(b.x, b.y, '#fbbf24', 12, 0.8);
+
+                            if (wasHQ) {
+                                logEvent('alert', `${wasOwner === 1 ? 'YOUR' : 'ENEMY'} HQ NEUTRALIZED! Capture with infantry to ${wasOwner === 1 ? 'reclaim' : 'win'}!`);
+                                notify(wasOwner === 1 ? "YOUR HQ IS NEUTRALIZED! Recapture with Infantry!" : "ENEMY HQ NEUTRALIZED! Capture with Infantry to WIN!");
+                            } else if (wasOwner === 1) {
+                                logEvent('loss', `${b.type} neutralized at sector ${getSector(b.x,b.y)}!`);
+                            } else {
+                                logEvent('victory', `Enemy ${b.type} neutralized at sector ${getSector(b.x,b.y)}. Send infantry to capture.`);
+                            }
+                        }
+                    }
+                });
+
+                if (supplyChanged) updateSupplyLines();
+                continue; // Drone is dead, skip movement
+            }
         }
 
+        // Standard movement
         if (u.path.length > 0) {
             let target = u.path[0];
             let dx = target.x - u.x;
@@ -673,6 +745,7 @@ function update() {
             }
         }
 
+        // Boid separation
         for (let j = 0; j < units.length; j++) {
             if (i !== j) {
                 let other = units[j];
@@ -684,6 +757,12 @@ function update() {
             }
         }
     }
+
+    // Safely remove all dead units
+    deadUnits.forEach(du => {
+        let idx = units.indexOf(du);
+        if (idx > -1) units.splice(idx, 1);
+    });
 
     structures.forEach(s => {
         if (s.owner === 1 && s.connected) revealFog(s.x, s.y, BUILDINGS[s.type].vision);
@@ -1755,7 +1834,6 @@ function updateSectorGridHighlight() {
     }));
 }
 
-// --- NOTIFICATIONS ---
 let notifTimeout;
 function notify(text) {
     let el = document.getElementById('notifications');
@@ -1773,7 +1851,6 @@ function showDiscovery(title, sub) {
     discoveryTimeout = setTimeout(() => box.classList.remove('show'), 5000);
 }
 
-// --- EVENT LOG ---
 function logEvent(level, message) {
     let mm = Math.floor(gameTime / 60).toString().padStart(2, '0');
     let ss = (gameTime % 60).toString().padStart(2, '0');
@@ -1790,7 +1867,6 @@ function renderEventLog() {
     ).join('');
 }
 
-// --- TOOLTIP ---
 function updateTooltip() {
     let tip = document.getElementById('tooltip');
     let wx = mouse.x / TILE_SIZE + camera.x;
@@ -1866,7 +1942,6 @@ function updateTooltip() {
 
 function distance(x1, y1, x2, y2) { return Math.hypot(x2 - x1, y2 - y1); }
 
-// --- INPUT ---
 canvas.addEventListener('mousedown', e => {
     if (e.button === 0) {
         mouse.isDown = true; mouse.startX = e.clientX; mouse.startY = e.clientY;
@@ -1875,7 +1950,6 @@ canvas.addEventListener('mousedown', e => {
         let tx = (e.clientX / TILE_SIZE) + camera.x;
         let ty = (e.clientY / TILE_SIZE) + camera.y;
         
-        // Spawn Right-Click Move Ring
         if (selection.length > 0) {
             moveRings.push({ x: tx, y: ty, radius: 0.1, life: 30, maxLife: 30 });
         }
