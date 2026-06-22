@@ -960,32 +960,36 @@ function runAI() {
     if (ai.phase === 2 && ai.phaseTimer > 180) ai.phase = 3;
 
     let hq = structures.find(s => s.type === 'HQ' && s.owner === 2);
-    if (!hq) {
-        let neutralHq = structures.find(s => s.type === 'HQ' && s.owner === 0 && s.id === 'hq2');
-        if (neutralHq) {
-            units.filter(u => u.owner === 2 && u.type === 'Infantry' && u.path.length === 0).forEach(u => {
-                setPath(u, neutralHq.x, neutralHq.y);
-            });
-        }
-        return;
-    }
 
-    let aiDrones = units.filter(u => u.owner === 2 && u.type === 'Drone').length;
-    let aiInfantry = units.filter(u => u.owner === 2 && u.type === 'Infantry').length;
-    let availableRelays = structures.filter(s => s.owner === 0 && s.type === 'Relay').length;
+    // --- NEW: UNIT SPAWNING (Only happens if HQ is alive and owned by AI) ---
+    if (hq) {
+        let aiDrones = units.filter(u => u.owner === 2 && u.type === 'Drone').length;
+        let aiInfantry = units.filter(u => u.owner === 2 && u.type === 'Infantry').length;
+        let availableRelays = structures.filter(s => s.owner === 0 && s.type === 'Relay').length;
 
-    if (ai.phaseTimer % 10 === 0) {
-        if (ai.phase >= 2 && ai.money >= 900 && aiInfantry >= 2) {
-            spawnUnit('Tank', 2, hq.x - 2, hq.y - 2); ai.money -= 300;
-        } 
-        else if (ai.money >= 500 && (aiInfantry < 6 || ai.money > 200)) {
-            spawnUnit('Infantry', 2, hq.x - 2, hq.y - 2); ai.money -= 100;
-        } 
-        else if (ai.money >= 50 && aiDrones < 2 && availableRelays > 0) {
-            spawnUnit('Drone', 2, hq.x - 2, hq.y - 2); ai.money -= 50;
+        if (ai.phaseTimer % 10 === 0) {
+            if (ai.phase >= 2 && ai.money >= 900 && aiInfantry >= 2) {
+                spawnUnit('Tank', 2, hq.x - 2, hq.y - 2); ai.money -= 300;
+            } 
+            else if (ai.money >= 500 && (aiInfantry < 6 || ai.money > 200)) {
+                spawnUnit('Infantry', 2, hq.x - 2, hq.y - 2); ai.money -= 100;
+            } 
+            else if (ai.money >= 50 && aiDrones < 2 && availableRelays > 0) {
+                spawnUnit('Drone', 2, hq.x - 2, hq.y - 2); ai.money -= 50;
+            }
         }
     }
 
+    // --- RECAPTURE DIRECTIVE (If HQ is neutral/captured, force infantry back) ---
+    let enemyHqObj = structures.find(s => s.id === 'hq2');
+    if (enemyHqObj && enemyHqObj.owner !== 2) {
+        // Send idle infantry to retake it
+        units.filter(u => u.owner === 2 && u.type === 'Infantry' && u.path.length === 0).forEach(u => {
+            setPath(u, enemyHqObj.x, enemyHqObj.y);
+        });
+    }
+
+    // --- UNIT MOVEMENT (Runs continuously, even if HQ is gone!) ---
     units.filter(u => u.owner === 2 && u.path.length === 0).forEach(u => {
         if (u.type === 'Drone') {
             let targetRelay = structures.filter(s => s.owner === 0 && s.type === 'Relay')
@@ -994,10 +998,14 @@ function runAI() {
             if (targetRelay) {
                 setPath(u, targetRelay.x, targetRelay.y);
             } else {
-                setPath(u, hq.x + (Math.random()*120 - 60), hq.y + (Math.random()*120 - 60));
+                // If HQ is gone, wander randomly around map center instead of dead HQ
+                let anchorX = hq ? hq.x : MAP_SIZE / 2;
+                let anchorY = hq ? hq.y : MAP_SIZE / 2;
+                setPath(u, anchorX + (Math.random()*120 - 60), anchorY + (Math.random()*120 - 60));
             }
         } 
         else if (u.type === 'Infantry') {
+            // If they aren't recapturing the HQ, let them secure other structures
             let target;
             if (ai.persona === 'Expansionist' || ai.persona === 'Fortress') {
                 target = structures.filter(s => s.owner === 0 && s.type !== 'Relay').sort((a,b) => distance(u.x,u.y, a.x,a.y) - distance(u.x,u.y, b.x,b.y))[0];
@@ -1015,6 +1023,7 @@ function runAI() {
                 let baseNode = owned[Math.floor(Math.random()*owned.length)];
                 if(baseNode) setPath(u, baseNode.x, baseNode.y);
             } else {
+                // Keep attacking your base
                 setPath(u, 20 + (Math.random()*10-5), 20 + (Math.random()*10-5)); 
             }
         }
