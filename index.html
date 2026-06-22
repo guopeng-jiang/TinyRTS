@@ -980,12 +980,15 @@ function runAI() {
         }
     }
 
-    // --- RECAPTURE DIRECTIVE (If HQ is neutral/captured, force infantry back) ---
+// --- RECAPTURE DIRECTIVE (If HQ is neutral/captured, force ALL units back) ---
     let enemyHqObj = structures.find(s => s.id === 'hq2');
     if (enemyHqObj && enemyHqObj.owner !== 2) {
-        // Send idle infantry to retake it
-        units.filter(u => u.owner === 2 && u.type === 'Infantry' && u.path.length === 0).forEach(u => {
-            setPath(u, enemyHqObj.x, enemyHqObj.y);
+        // ALL enemy units drop what they are doing to swarm the HQ
+        units.filter(u => u.owner === 2).forEach(u => {
+            // Cancel current tasks if they aren't already heading to the HQ area
+            if (u.path.length === 0 || distance(u.path[0].x, u.path[0].y, enemyHqObj.x, enemyHqObj.y) > 4) {
+                setPath(u, enemyHqObj.x + (Math.random() * 2 - 1), enemyHqObj.y + (Math.random() * 2 - 1));
+            }
         });
     }
 
